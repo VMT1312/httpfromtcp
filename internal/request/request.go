@@ -51,8 +51,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	buf := make([]byte, bufferSize, bufferSize)
 	readToIndex := 0
 	request := Request{
-		RequestLine: RequestLine{},
-		status:      initialized,
+		status: initialized,
 	}
 	for request.status != done {
 		if readToIndex == len(buf) {
