@@ -46,7 +46,12 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	key = strings.ToLower(key)
 	value := headerText[colonIdx+1:]
 	value = strings.TrimSpace(value)
-	h[key] = value
+	_, ok := h[key]
+	if ok {
+		h[key] = h[key] + ", " + value
+	} else {
+		h[key] = value
+	}
 	return idx + 2, false, nil
 }
 

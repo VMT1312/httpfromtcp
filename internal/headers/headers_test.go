@@ -65,6 +65,18 @@ func TestRequestLineParse(t *testing.T) {
 	assert.Equal(t, 23, n)
 	assert.False(t, done)
 
+	// Test: Valid multiple values
+	headers = Headers{
+		"num": "1",
+	}
+	data = []byte("Num: 0\r\n\r\n")
+	n, done, err = headers.Parse(data)
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	assert.Equal(t, "1, 0", headers["num"])
+	assert.Equal(t, 8, n)
+	assert.False(t, done)
+
 	// Test: Invalid spacing header
 	headers = NewHeaders()
 	data = []byte("       Host : localhost:42069       \r\n\r\n")
