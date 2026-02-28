@@ -1,9 +1,10 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
-	"io"
-	"log"
+	"httpfromtcp/internal/request"
+	"httpfromtcp/internal/response"
 	"net"
 	"strconv"
 	"sync/atomic"
@@ -12,9 +13,10 @@ import (
 type Server struct {
 	listener net.Listener
 	closed   atomic.Bool
+	handler  Handler
 }
 
-func Serve(port int) (*Server, error) {
+func Serve(port int, h Handler) (*Server, error) {
 	addr := strconv.FormatInt(int64(port), 10)
 	listener, err := net.Listen("tcp", ":"+addr)
 	if err != nil {
@@ -22,6 +24,7 @@ func Serve(port int) (*Server, error) {
 	}
 	s := &Server{
 		listener: listener,
+		handler:  h,
 	}
 	go s.listen()
 	return s, nil
@@ -52,14 +55,22 @@ func (s *Server) listen() {
 
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
-	resp := "HTTP/1.1 200 OK\r\n" +
-		"Content-Type: text/plain\r\n" +
-		"Content-Length: 13\r\n" +
-		"\r\n" +
-		"Hello World!"
-	_, err := io.WriteString(conn, resp)
+	req, err := request.RequestFromReader(conn)
 	if err != nil {
-		log.Fatalf("error writing to connection: %v", err)
+		HandlerError{
+			Code: response.StatusBadRequest,
+			Msg:  fmt.Sprintf("Bad request: %v", err),
+		}.Write(conn)
 		return
+	}
+	buf := bytes.Buffer{}
+	h := s.handler(&buf, req)
+	if h != nil {
+		h.Write(conn)
+	} else {
+		headers := response.GetDefaultHeaders(buf.Len())
+		response.WriteStatusLine(conn, response.StatusOK)
+		response.WriteHeaders(conn, headers)
+		conn.Write(buf.Bytes())
 	}
 }
