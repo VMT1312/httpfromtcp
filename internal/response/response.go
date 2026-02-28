@@ -50,7 +50,7 @@ func GetDefaultHeaders(contentLen int) headers.Headers {
 	h := headers.NewHeaders()
 	h["Content-Length"] = strconv.FormatInt(int64(contentLen), 10)
 	h["Connection"] = "close"
-	h["Content-Type"] = "text/plain"
+	h["Content-Type"] = "text/html"
 	return h
 }
 

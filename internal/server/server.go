@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
@@ -9,6 +8,8 @@ import (
 	"strconv"
 	"sync/atomic"
 )
+
+type Handler func(w *response.Writer, req *request.Request)
 
 type Server struct {
 	listener net.Listener
@@ -63,14 +64,5 @@ func (s *Server) handle(conn net.Conn) {
 		}.Write(conn)
 		return
 	}
-	buf := bytes.Buffer{}
-	h := s.handler(&buf, req)
-	if h != nil {
-		h.Write(conn)
-	} else {
-		headers := response.GetDefaultHeaders(buf.Len())
-		response.WriteStatusLine(conn, response.StatusOK)
-		response.WriteHeaders(conn, headers)
-		conn.Write(buf.Bytes())
-	}
+	s.handler(response.NewWriter(conn), req)
 }
