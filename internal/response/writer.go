@@ -18,6 +18,8 @@ const (
 	writeStatusLine state = iota
 	writeHeaders
 	writeBody
+	writeTrailers
+	writeDone
 )
 
 func (w *Writer) WriteStatusLine(StatusCode StatusCode) error {
@@ -79,7 +81,27 @@ func (w *Writer) WriteChunkedBodyDone() (int, error) {
 	if w.writerState != writeBody {
 		return 0, errors.New("haven't written headers")
 	}
-	return w.writer.Write([]byte("0\r\n\r\n"))
+	w.writerState = writeTrailers
+	return w.writer.Write([]byte("0\r\n"))
+}
+
+func (w *Writer) WriteTrailers(h headers.Headers) error {
+	if w.writerState != writeTrailers {
+		return errors.New("haven't written body")
+	}
+	for k, v := range h {
+		body := fmt.Sprintf("%s: %s\r\n", k, v)
+		_, err := w.writer.Write([]byte(body))
+		if err != nil {
+			return err
+		}
+	}
+	_, err := w.writer.Write([]byte("\r\n"))
+	if err != nil {
+		return err
+	}
+	w.writerState = writeDone
+	return nil
 }
 
 func NewWriter(w io.Writer) *Writer {

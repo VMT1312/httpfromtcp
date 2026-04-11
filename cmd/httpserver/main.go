@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
+	"fmt"
+	"httpfromtcp/internal/headers"
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
 	"httpfromtcp/internal/server"
@@ -87,13 +90,8 @@ func handlerRequest(w *response.Writer, req *request.Request) {
 }
 
 func handlerProxy(w *response.Writer, req *request.Request) {
-	var url string
-	if strings.HasPrefix(req.RequestLine.RequestTarget, "/httpbin/") {
-		subPath := strings.TrimPrefix(req.RequestLine.RequestTarget, "/httpbin/")
-		url = "https://httpbin.org/" + subPath
-	} else {
-		return
-	}
+	subPath := strings.TrimPrefix(req.RequestLine.RequestTarget, "/httpbin/")
+	url := "https://httpbin.org/" + subPath
 	resp, err := http.Get(url)
 	if err != nil {
 		handlerRequest(w, &request.Request{
@@ -108,7 +106,9 @@ func handlerProxy(w *response.Writer, req *request.Request) {
 	h := response.GetDefaultHeaders(0)
 	h.Remove("Content-Length")
 	h.Override("Transfer-Encoding", "chunked")
+	h.Override("Trailer", "X-Content-SHA256, X-Content-Length")
 	w.WriteHeaders(h)
+	fullBody := []byte{}
 	for {
 		n, err := resp.Body.Read(buf)
 		if err != nil && err != io.EOF {
@@ -120,10 +120,18 @@ func handlerProxy(w *response.Writer, req *request.Request) {
 			return
 		}
 		if n > 0 {
+			fullBody = append(fullBody, buf[:n]...)
 			w.WriteChunkedBody(buf[:n])
 		}
 		if err == io.EOF {
 			w.WriteChunkedBodyDone()
+			hashString := fmt.Sprintf("%x", sha256.Sum256(fullBody))
+			contentLength := len(fullBody)
+			w.WriteTrailers(headers.Headers{
+				"X-Content-SHA256": hashString,
+				"X-Content-Length": fmt.Sprintf("%d", contentLength),
+			})
+			return
 		}
 	}
 }
