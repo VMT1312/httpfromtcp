@@ -4,9 +4,12 @@ import (
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
 	"httpfromtcp/internal/server"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 )
 
@@ -45,7 +48,7 @@ const (
 )
 
 func main() {
-	server, err := server.Serve(port, handler)
+	server, err := server.Serve(port, handlerRequest)
 	if err != nil {
 		log.Fatalf("Error starting server: %v", err)
 	}
@@ -58,7 +61,11 @@ func main() {
 	log.Println("Server gracefully stopped")
 }
 
-func handler(w *response.Writer, req *request.Request) {
+func handlerRequest(w *response.Writer, req *request.Request) {
+	if strings.HasPrefix(req.RequestLine.RequestTarget, "/httpbin/") {
+		handlerProxy(w, req)
+		return
+	}
 	if req.RequestLine.RequestTarget == "/yourproblem" {
 		w.WriteStatusLine(response.StatusBadRequest)
 		h := response.GetDefaultHeaders(len(badRequest))
@@ -77,4 +84,46 @@ func handler(w *response.Writer, req *request.Request) {
 	h := response.GetDefaultHeaders(len(goodRequest))
 	w.WriteHeaders(h)
 	w.WriteBody([]byte(goodRequest))
+}
+
+func handlerProxy(w *response.Writer, req *request.Request) {
+	var url string
+	if strings.HasPrefix(req.RequestLine.RequestTarget, "/httpbin/") {
+		subPath := strings.TrimPrefix(req.RequestLine.RequestTarget, "/httpbin/")
+		url = "https://httpbin.org/" + subPath
+	} else {
+		return
+	}
+	resp, err := http.Get(url)
+	if err != nil {
+		handlerRequest(w, &request.Request{
+			RequestLine: request.RequestLine{
+				RequestTarget: "/myproblem",
+			},
+		})
+	}
+	defer resp.Body.Close()
+	buf := make([]byte, 1024)
+	w.WriteStatusLine(response.StatusOK)
+	h := response.GetDefaultHeaders(0)
+	h.Remove("Content-Length")
+	h.Override("Transfer-Encoding", "chunked")
+	w.WriteHeaders(h)
+	for {
+		n, err := resp.Body.Read(buf)
+		if err != nil && err != io.EOF {
+			handlerRequest(w, &request.Request{
+				RequestLine: request.RequestLine{
+					RequestTarget: "/myproblem",
+				},
+			})
+			return
+		}
+		if n > 0 {
+			w.WriteChunkedBody(buf[:n])
+		}
+		if err == io.EOF {
+			w.WriteChunkedBodyDone()
+		}
+	}
 }

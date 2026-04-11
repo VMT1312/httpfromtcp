@@ -2,6 +2,7 @@ package response
 
 import (
 	"errors"
+	"fmt"
 	"httpfromtcp/internal/headers"
 	"io"
 )
@@ -49,6 +50,36 @@ func (w *Writer) WriteBody(p []byte) (int, error) {
 		return 0, err
 	}
 	return n, err
+}
+
+func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
+	total := 0
+	if w.writerState != writeBody {
+		return 0, errors.New("haven't written headers")
+	}
+	n, err := fmt.Fprintf(w.writer, "%x\r\n", len(p))
+	if err != nil {
+		return 0, err
+	}
+	total += n
+	n, err = w.writer.Write(p)
+	if err != nil {
+		return 0, err
+	}
+	total += n
+	n, err = w.writer.Write([]byte("\r\n"))
+	if err != nil {
+		return 0, err
+	}
+	total += n
+	return total, nil
+}
+
+func (w *Writer) WriteChunkedBodyDone() (int, error) {
+	if w.writerState != writeBody {
+		return 0, errors.New("haven't written headers")
+	}
+	return w.writer.Write([]byte("0\r\n\r\n"))
 }
 
 func NewWriter(w io.Writer) *Writer {
