@@ -83,6 +83,22 @@ func handlerRequest(w *response.Writer, req *request.Request) {
 		w.WriteBody([]byte(internalError))
 		return
 	}
+	if req.RequestLine.RequestTarget == "/video" {
+		b, err := os.ReadFile("assets/vim.mp4")
+		if err != nil {
+			w.WriteStatusLine(response.StatusInternalError)
+			h := response.GetDefaultHeaders(len(internalError))
+			w.WriteHeaders(h)
+			w.WriteBody([]byte(internalError))
+			return
+		}
+		w.WriteStatusLine(response.StatusOK)
+		h := response.GetDefaultHeaders(len(b))
+		h.Override("Content-Type", "video/mp4")
+		w.WriteHeaders(h)
+		w.WriteBody(b)
+		return
+	}
 	w.WriteStatusLine(response.StatusOK)
 	h := response.GetDefaultHeaders(len(goodRequest))
 	w.WriteHeaders(h)
